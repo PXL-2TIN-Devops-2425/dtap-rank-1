@@ -1,10 +1,77 @@
 pipeline {
     agent any
+    environment {
+        SSH_KEY_ID = 'productionServer'
+        REMOTE_HOST = 'ubuntu@3.237.46.191'
+    }
     stages {
-        stage('dtap production') {
+        stage('deploy prod') {
             steps {
-                echo "good luck..."
+                sshagent(credentials: [env.SSH_KEY_ID]) {
+                    sh 'ssh -o StrictHostKeyChecking=no ${REMOTE_HOST}'
+                     withCredentials([usernamePassword(credentialsId: 'myDockerCreds', 
+                                    passwordVariable: 'DOCKER_PASSWORD', 
+                                    usernameVariable: 'DOCKER_USERNAME')]) {
+                            sh 'docker login -u "$DOCKER_USERNAME" -p "$DOCKER_PASSWORD"'
+                        }
+                        script {
+                        sh """
+                            if [ "\$(docker ps -qa)" ]; then
+                                docker stop \$(docker ps -qa)
+                                docker rm -f \$(docker ps -qa)
+                            else
+                                echo "No running containers to remove"
+                            fi
+
+                            if [ "\$(docker images -q)" ]; then
+                                docker rmi -f \$(docker images -q)
+                            else
+                                echo "No images to remove"
+                            fi
+                        """
+                    }
+                    sh 'docker pull anasra/calculator-app:latest'
+                }
             }
         }
+        
+        stage('start prod') {
+            steps {
+                sshagent(credentials: [env.SSH_KEY_ID]) {
+                    sh 'docker run -d -p 80:3000 --name calculator-app anasra/calculator-app:latest'
+                }
+            }
+        }
+        stage('test prod'){
+            steps{
+                  sshagent(credentials: [env.SSH_KEY_ID]){
+                   sh 'sleep 50'
+                   sh 'curl http://localhost/'
+                }
+            }
+        }
+        stage('clean up'){
+            steps{
+                sshagent(credentials: [env.SSH_KEY_ID]) {
+                    script {
+                        sh """
+                            if [ "$(docker ps -qa)" ]; then
+                                docker stop $(docker ps -qa)
+                                docker rm -f $(docker ps -qa)
+                            else
+                                echo "No running containers to remove"
+                            fi
+
+                            if [ "$(docker images -q)" ]; then
+                                docker rmi -f $(docker images -q)
+                            else
+                                echo "No images to remove"
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+
     }
 }
