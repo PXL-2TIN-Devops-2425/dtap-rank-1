@@ -42,5 +42,36 @@ pipeline {
                 }
             }
         }
+        stage('test prod'){
+            steps{
+                  sshagent(credentials: [env.SSH_KEY_ID]){
+                   sh 'sleep 50'
+                   sh 'curl http://localhost/'
+                }
+            }
+        }
+        stage('clean up'){
+            steps{
+                sshagent(credentials: [env.SSH_KEY_ID]) {
+                    script {
+                        sh """
+                            if [ "$(docker ps -qa)" ]; then
+                                docker stop $(docker ps -qa)
+                                docker rm -f $(docker ps -qa)
+                            else
+                                echo "No running containers to remove"
+                            fi
+
+                            if [ "$(docker images -q)" ]; then
+                                docker rmi -f $(docker images -q)
+                            else
+                                echo "No images to remove"
+                            fi
+                        """
+                    }
+                }
+            }
+        }
+
     }
 }
