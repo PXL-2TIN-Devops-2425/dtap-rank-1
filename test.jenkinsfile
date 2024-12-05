@@ -1,16 +1,62 @@
 pipeline {
     agent any
+
+    tools {
+        nodejs "testenvnode"
+    }
   
     stages {
-        stage ('cleanup'){
-            steps{
-                // TODO
+        stage('Cleanup') {
+            steps {
+                sh '''
+                rm -rf *
+                rm -rf .[!.]* ..?*
+                '''
+                script{
+                     sh '''#!/bin/bash
+                    if [ "$(docker ps -qa)" ]; then
+                        docker stop $(docker ps -qa)
+                        docker rm -f $(docker ps -qa)
+                        echo "Containers stopped and removed succesfully"
+                    else
+                        echo "No running containers to remove"
+                    fi'''
+
+                    sh '''#!/bin/bash
+                    if [ "$(docker images -q)" ]; then
+                    docker rmi -f $(docker images -q)
+                    echo "Images deleted succesfully"
+                    else
+                    echo "No images to remove"
+                    fi'''
+                }
             }
         }
-        stage('fetch app code') {
+        
+        stage('Fetch App Code') {
             steps {
-                // Get some code from a GitHub repository
                 git branch: 'main', url: 'https://github.com/PXL-2TIN-DevOps-Resources/calculator-app-finished.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Build Artifact') {
+              steps {
+                withCredentials([usernamePassword(credentialsId: 'myDockerCreds', 
+                                passwordVariable: 'DOCKER_PASSWORD', 
+                                usernameVariable: 'DOCKER_USERNAME')]) {
+                    sh 'echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin'
+                   
+                    sh '''
+                    docker build -t anasra/calculator-app:latest .
+                    docker image ls
+                    '''
+                }
             }
         }
     }
