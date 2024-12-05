@@ -59,5 +59,45 @@ pipeline {
                 }
             }
         }
+         stage('Push Artifact') {
+            steps{
+                 sh 'docker push anasra/calculator-app:latest'
+                 echo 'Image pushed successfully'
+                 sh 'docker image rmi anasra/calculator-app:latest'
+            }
+        }
+
+        stage('Deployment') {
+            steps {
+                sh 'docker pull anasra/calculator-app:latest'
+                sh 'docker run -d -p 3000:3000 --name calculator-app anasra/calculator-app:latest'
+                sh 'sleep 30'
+            }
+        }
+
+        stage('Post Cleanup') {
+            steps {
+                script{
+                    sh '''#!/bin/bash
+                    if [ "$(docker ps -qa)" ]; then
+                        docker stop $(docker ps -qa)
+                        docker rm -f $(docker ps -qa)
+                    else
+                        echo "No running containers to remove"
+                    fi'''
+
+                    sh '''#!/bin/bash
+                    if [ "$(docker images -q)" ]; then
+                        docker rmi -f $(docker images -q)
+                    else
+                        echo "No images to remove"
+                    fi'''
+                }
+                sh '''
+                rm -rf *
+                rm -rf .[!.]* ..?*
+                '''
+            }
+        }
     }
 }
